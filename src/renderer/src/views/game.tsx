@@ -225,6 +225,7 @@ export default function Game() {
         setHasBet(false);
         setLastWin(null);
         setCrashPoint(0);
+        cleanupGame();
 
         countdownIntervalRef.current = setInterval(() => {
             setTimeRemaining((prev) => {
@@ -240,6 +241,23 @@ export default function Game() {
             });
         }, 1000);
     }, [clearAllTimers, startFlying]);
+
+    const cleanupGame = useCallback(() => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.strokeStyle = '#10b981';
+                ctx.fillStyle = 'transparent';
+            }
+        }
+    }, [canvasRef]);
 
     const placeBet = () => {
         if (gamePhase !== 'betting' || betAmount > balance || betAmount <= 0 || timeRemaining === 0) return;
