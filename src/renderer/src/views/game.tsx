@@ -62,19 +62,20 @@ export default function Game() {
             const baseProgress = Math.min((multiplier - 1) / (maxDisplayMultiplier - 1), 1);
             const totalProgress = (multiplier - 1) / (maxDisplayMultiplier - 1);
             const maxCurveHeight = height;
+            const progressX = baseProgress * width;
 
             ctx.beginPath();
             ctx.moveTo(0, height);
 
-            for (let x = 0; x <= width; x += 2) {
+            for (let x = 0; x <= progressX; x += 2) {
                 const normalizedX = x / width;
 
                 let y;
                 if (totalProgress <= 1) {
-                    y = height - Math.pow(normalizedX, 1.5) * baseProgress * maxCurveHeight;
+                    y = height - Math.pow(normalizedX, 1.1) * baseProgress * maxCurveHeight;
                 } else {
                     const excessProgress = totalProgress - 1;
-                    const dynamicExponent = 1.5 + excessProgress * 1.5;
+                    const dynamicExponent = 1.1 + excessProgress * 1.1;
                     const curveValue = Math.pow(normalizedX, Math.min(dynamicExponent, 5));
                     y = height - curveValue * maxCurveHeight;
                 }
@@ -82,22 +83,22 @@ export default function Game() {
                 ctx.lineTo(x, y);
             }
 
-            ctx.lineTo(width, height);
+            ctx.lineTo(progressX - 1, height);
             ctx.closePath();
             ctx.fillStyle = gradient;
             ctx.fill();
 
             ctx.beginPath();
             ctx.moveTo(0, height);
-            for (let x = 0; x <= width; x += 2) {
+            for (let x = 0; x <= progressX; x += 2) {
                 const normalizedX = x / width;
 
                 let y;
                 if (totalProgress <= 1) {
-                    y = height - Math.pow(normalizedX, 1.5) * baseProgress * maxCurveHeight;
+                    y = height - Math.pow(normalizedX, 1.1) * baseProgress * maxCurveHeight;
                 } else {
                     const excessProgress = totalProgress - 1;
-                    const dynamicExponent = 1.5 + excessProgress * 1.5;
+                    const dynamicExponent = 1.1 + excessProgress * 1.1;
                     const curveValue = Math.pow(normalizedX, Math.min(dynamicExponent, 5));
                     y = height - curveValue * maxCurveHeight;
                 }
@@ -116,23 +117,34 @@ export default function Game() {
                 ctx.stroke();
             }
 
-            if (!crashed && gamePhase === 'flying') {
-                const planeProgress = Math.min(baseProgress * 0.9, 0.85);
-                const planeX = width * planeProgress;
-
-                let planeY;
+            if (!crashed) {
+                // Calcula a posição da ponta da linha
+                const ballX = progressX;
+                const normalizedX = ballX / width;
+                let ballY;
                 if (totalProgress <= 1) {
-                    planeY = height - Math.pow(planeProgress, 1.5) * maxCurveHeight - 15;
+                    ballY = height - Math.pow(normalizedX, 1.1) * baseProgress * maxCurveHeight;
                 } else {
                     const excessProgress = totalProgress - 1;
-                    const dynamicExponent = 1.5 + excessProgress * 1.5;
-                    const curveValue = Math.pow(planeProgress, Math.min(dynamicExponent, 5));
-                    planeY = height - curveValue * maxCurveHeight - 15;
+                    const dynamicExponent = 1.1 + excessProgress * 1.1;
+                    const curveValue = Math.pow(normalizedX, Math.min(dynamicExponent, 5));
+                    ballY = height - curveValue * maxCurveHeight;
                 }
 
-                ctx.font = '20px Arial';
-                ctx.fillStyle = '#3b82f6';
-                ctx.fillText('✈️', planeX, planeY);
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(ballX, ballY, 4, 0, 2 * Math.PI); // raio 16px
+                ctx.fillStyle = ctx.createRadialGradient(ballX - 6, ballY - 6, 6, ballX, ballY, 16);
+                ctx.fillStyle.addColorStop?.(0, '#10b981');
+                ctx.fillStyle.addColorStop?.(1, '#10b981');
+                ctx.fillStyle = '#10b981';
+                ctx.shadowColor = '#10b981';
+                ctx.shadowBlur = 12;
+                ctx.fill();
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = '#10b981';
+                ctx.stroke();
+                ctx.restore();
             }
         },
         [gamePhase]
@@ -160,7 +172,7 @@ export default function Game() {
         }
 
         isGameRunningRef.current = true;
-        const newCrashPoint = generateCrashPoint();
+        const newCrashPoint = 50;
         setCrashPoint(newCrashPoint);
         setCurrentMultiplier(1.0);
         console.log(`Novo ponto de crash: ${newCrashPoint.toFixed(2)}x`);
@@ -350,8 +362,8 @@ export default function Game() {
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className='relative'>
-                                    <canvas ref={canvasRef} className='w-full h-64 bg-slate-900/50 rounded-lg' style={{ width: '100%', height: '256px' }} />
+                                <div className='relative overflow-visible'>
+                                    <canvas ref={canvasRef} className='w-full h-64 bg-slate-900/50 rounded-lg' style={{ overflow: 'visible', width: '100%', height: '300px' }} />
                                     {gamePhase === 'crashed' && (
                                         <div className='absolute inset-0 flex items-center justify-center'>
                                             <div className='text-6xl animate-bounce'>💥</div>
