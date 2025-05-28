@@ -27,6 +27,7 @@ export default function Game() {
     const animationRef = useRef<number>();
     const phaseTimeoutRef = useRef<NodeJS.Timeout>();
     const countdownIntervalRef = useRef<NodeJS.Timeout>();
+    const isGameRunningRef = useRef(false);
 
     const generateCrashPoint = useCallback(() => {
         const random = Math.random();
@@ -152,50 +153,13 @@ export default function Game() {
         }
     }, []);
 
-    const resetGame = useCallback(() => {
-        clearAllTimers();
-        setGamePhase('betting');
-        setTimeRemaining(5);
-        setCurrentMultiplier(1.0);
-        setHasBet(false);
-        setLastWin(null);
-        setCrashPoint(0);
-
-        const canvas = canvasRef.current;
-        if (canvas) {
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = '#0f172a';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                ctx.globalCompositeOperation = 'source-over';
-                ctx.strokeStyle = '#10b981';
-                ctx.fillStyle = 'transparent';
-            }
-        }
-    }, [clearAllTimers]);
-
-    const startBettingCountdown = useCallback(() => {
-        resetGame();
-
-        countdownIntervalRef.current = setInterval(() => {
-            setTimeRemaining((prev) => {
-                if (prev <= 1) {
-                    clearInterval(countdownIntervalRef.current!);
-                    phaseTimeoutRef.current = setTimeout(() => {
-                        setGamePhase('flying');
-                        startFlying();
-                    }, 100);
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
-    }, [resetGame]);
-
     const startFlying = useCallback(() => {
+        if (isGameRunningRef.current) {
+            console.log('startFlying já está rodando, ignorando chamada duplicada');
+            return;
+        }
+
+        isGameRunningRef.current = true;
         const newCrashPoint = generateCrashPoint();
         setCrashPoint(newCrashPoint);
         setCurrentMultiplier(1.0);
@@ -204,6 +168,10 @@ export default function Game() {
         const startTime = Date.now();
 
         const gameLoop = () => {
+            if (!isGameRunningRef.current) {
+                return;
+            }
+
             const elapsed = (Date.now() - startTime) / 1000;
             const newMultiplier = 1 + Math.pow(elapsed, 1.5) * 0.3;
 
@@ -216,6 +184,7 @@ export default function Game() {
                     animationRef.current = undefined;
                 }
 
+                isGameRunningRef.current = false;
                 setCurrentMultiplier(newCrashPoint);
                 setGamePhase('crashed');
 
@@ -244,7 +213,33 @@ export default function Game() {
         };
 
         gameLoop();
-    }, [generateCrashPoint, hasBet, drawGraph, startBettingCountdown]);
+    }, [generateCrashPoint, hasBet, drawGraph]);
+
+    const startBettingCountdown = useCallback(() => {
+        clearAllTimers();
+        isGameRunningRef.current = false;
+
+        setGamePhase('betting');
+        setTimeRemaining(5);
+        setCurrentMultiplier(1.0);
+        setHasBet(false);
+        setLastWin(null);
+        setCrashPoint(0);
+
+        countdownIntervalRef.current = setInterval(() => {
+            setTimeRemaining((prev) => {
+                if (prev <= 1) {
+                    clearInterval(countdownIntervalRef.current!);
+                    phaseTimeoutRef.current = setTimeout(() => {
+                        setGamePhase('flying');
+                        startFlying();
+                    }, 100);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    }, [clearAllTimers, startFlying]);
 
     const placeBet = () => {
         if (gamePhase !== 'betting' || betAmount > balance || betAmount <= 0 || timeRemaining === 0) return;
@@ -264,13 +259,16 @@ export default function Game() {
     };
 
     useEffect(() => {
-        const timer = setTimeout(startBettingCountdown, 1000);
+        if (!isGameRunningRef.current) {
+            const timer = setTimeout(startBettingCountdown, 1000);
 
-        return () => {
-            clearTimeout(timer);
-            clearAllTimers();
-        };
-    }, [startBettingCountdown, clearAllTimers]);
+            return () => {
+                clearTimeout(timer);
+                clearAllTimers();
+            };
+        }
+        return undefined;
+    }, []);
 
     useEffect(() => {
         const canvas = canvasRef.current;
