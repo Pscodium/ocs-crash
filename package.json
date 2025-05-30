@@ -1,6 +1,6 @@
 {
     "name": "ocs-crash",
-    "version": "1.0.31",
+    "version": "1.0.0",
     "description": "OCS Crash",
     "main": "./out/main/index.js",
     "author": "Peterson Larson",
