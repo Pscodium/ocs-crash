@@ -1,7 +1,6 @@
 /* eslint-disable no-empty-pattern */
-import { app, shell, BrowserWindow, dialog, ipcMain } from 'electron';
-import path, { join } from 'path';
-import fs from 'fs';
+import { app, shell, BrowserWindow, ipcMain } from 'electron';
+import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import icon from '../../resources/favicon.png?asset';
 
@@ -55,36 +54,6 @@ function createWindow(): void {
                 break;
             default:
                 break;
-        }
-    });
-
-    ipcMain.handle('select-audio-files', async () => {
-        if (!mainWindow) return [];
-
-        const result = await dialog.showOpenDialog(mainWindow, {
-            properties: ['openFile', 'multiSelections'],
-            filters: [{ name: 'Arquivos de Áudio', extensions: ['wav', 'mp3', 'ogg'] }],
-        });
-
-        if (result.canceled) {
-            return [];
-        }
-
-        // Retorna os caminhos e nomes dos arquivos selecionados
-        return result.filePaths.map((filePath) => ({
-            path: filePath,
-            name: path.basename(filePath),
-        }));
-    });
-
-    // Manipulador para ler arquivos de áudio
-    ipcMain.handle('read-audio-file', async (event, filePath) => {
-        try {
-            const buffer = fs.readFileSync(filePath);
-            return Array.from(new Uint8Array(buffer));
-        } catch (error) {
-            console.error('Erro ao ler arquivo de áudio:', error);
-            throw error;
         }
     });
 }
