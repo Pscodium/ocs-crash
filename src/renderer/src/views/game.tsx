@@ -3,14 +3,12 @@ import { Button } from '@renderer/components/ui/button';
 import { Input } from '@renderer/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card';
 import { Badge } from '@renderer/components/ui/badge';
-import { Plane, TrendingUp, History, PlusIcon } from 'lucide-react';
+import { Plane, TrendingUp, History, PlusIcon, Settings } from 'lucide-react';
 import { Switch } from '@renderer/components/ui/switch';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-  } from "@renderer/components/ui/tooltip"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@renderer/components/ui/tooltip';
+import { probabilityService, Difficulty } from '@renderer/services/prob.service';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@renderer/components/ui/dropdown-menu';
+import clsx from 'clsx';
 
 interface GameResult {
     multiplier: number;
@@ -36,6 +34,9 @@ export default function Game() {
     const [lastWinMultiplier, setLastWinMultiplier] = useState<number | null>(null);
     const [lastProfit, setLastProfit] = useState<number | null>(null);
     const [timeRemaining, setTimeRemaining] = useState(5);
+    const difficultyRef = useRef<Difficulty>('normal');
+    const [difficulty, setDifficulty] = useState<Difficulty>('normal');
+    const difficultyLevels: Difficulty[] = ['easy', 'normal', 'hard'];
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animationRef = useRef<number>();
@@ -43,14 +44,6 @@ export default function Game() {
     const countdownIntervalRef = useRef<NodeJS.Timeout>();
     const isGameRunningRef = useRef(false);
     const scrollRef = useRef<HTMLDivElement | null>(null);
-
-    const generateCrashPoint = useCallback(() => {
-        const random = Math.random();
-        if (random < 0.5) return 1 + Math.random() * 2;
-        if (random < 0.8) return 3 + Math.random() * 7;
-        if (random < 0.95) return 10 + Math.random() * 40;
-        return 50 + Math.random() * 450;
-    }, []);
 
     const drawGraph = useCallback(
         (multiplier: number, crashed = false) => {
@@ -188,7 +181,7 @@ export default function Game() {
 
         let autoCashoutAlreadySet = false;
         isGameRunningRef.current = true;
-        const newCrashPoint = generateCrashPoint();
+        const newCrashPoint = probabilityService.probabilityCreator(200, probabilityService.difficultProbabilityCreator(difficultyRef.current));
         setCrashPoint(newCrashPoint);
         setCurrentMultiplier(1.0);
 
@@ -250,7 +243,7 @@ export default function Game() {
         };
 
         gameLoop();
-    }, [generateCrashPoint, hasBetRef, autoCashoutEnabledRef, autoCashoutRef, drawGraph, autoCashoutEnabled]);
+    }, [hasBetRef, autoCashoutEnabledRef, autoCashoutRef, drawGraph, autoCashoutEnabled, probabilityService, difficultyRef]);
 
     const startBettingCountdown = useCallback(() => {
         clearAllTimers();
@@ -407,13 +400,18 @@ export default function Game() {
         for (let i = 0; i < 10; i++) {
             setGameHistory((prev) => [
                 {
-                    multiplier: generateCrashPoint(),
+                    multiplier: probabilityService.probabilityCreator(200, probabilityService.difficultProbabilityCreator(difficulty)),
                     timestamp: new Date(Date.now() - i * 60000),
                 },
                 ...prev,
             ]);
         }
         setBalance(1000);
+    };
+
+    const handleSelectDifficulty = (level: Difficulty) => {
+        difficultyRef.current = level;
+        setDifficulty(level);
     };
 
     const canBet = gamePhase === 'betting' && timeRemaining > 0;
@@ -424,6 +422,28 @@ export default function Game() {
             <button className='absolute top-4 text-white' onClick={debugMode}>
                 debug mode
             </button>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button className='absolute top-4 right-4 flex items-center gap-2 text-white px-4 py-2 rounded-lg shadow'>
+                        <Settings className='w-4 h-4' />
+                    </Button>
+                </DropdownMenuTrigger>
+
+                <DropdownMenuContent className='w-48 bg-zinc-800 text-white border border-zinc-700 shadow-lg rounded-md'>
+                    {difficultyLevels.map((level) => (
+                        <DropdownMenuItem
+                            key={level}
+                            onClick={() => handleSelectDifficulty(level)}
+                            className={clsx('cursor-pointer px-3 py-2 rounded-md transition-colors', {
+                                'bg-zinc-700 text-white': difficulty === level,
+                                'hover:bg-zinc-700 hover:text-white': difficulty !== level,
+                            })}
+                        >
+                            {level}
+                        </DropdownMenuItem>
+                    ))}
+                </DropdownMenuContent>
+            </DropdownMenu>
             <div className='max-w-7xl mx-auto space-y-6'>
                 <div className='text-center space-y-2'>
                     <h1 className='text-4xl font-bold text-white flex items-center justify-center p-5 gap-2'>
