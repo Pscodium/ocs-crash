@@ -3,7 +3,14 @@ import { Button } from '@renderer/components/ui/button';
 import { Input } from '@renderer/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@renderer/components/ui/card';
 import { Badge } from '@renderer/components/ui/badge';
-import { Plane, TrendingUp, DollarSign, History } from 'lucide-react';
+import { Plane, TrendingUp, History, PlusIcon } from 'lucide-react';
+import { Switch } from '@renderer/components/ui/switch';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+  } from "@renderer/components/ui/tooltip"
 
 interface GameResult {
     multiplier: number;
@@ -14,13 +21,20 @@ type GamePhase = 'betting' | 'flying' | 'crashed' | 'cooldown';
 
 export default function Game() {
     const [balance, setBalance] = useState(1000);
+    const betAmountRef = useRef(10);
     const [betAmount, setBetAmount] = useState(10);
+    const autoCashoutRef = useRef(1.0);
+    const [autoCashout, setAutoCashout] = useState(1.0);
+    const autoCashoutEnabledRef = useRef(false);
+    const [autoCashoutEnabled, setAutoCashoutEnabled] = useState(false);
     const [currentMultiplier, setCurrentMultiplier] = useState(1.0);
     const [gamePhase, setGamePhase] = useState<GamePhase>('betting');
+    const hasBetRef = useRef(false);
     const [hasBet, setHasBet] = useState(false);
     const [gameHistory, setGameHistory] = useState<GameResult[]>([]);
     const [crashPoint, setCrashPoint] = useState(0);
-    const [lastWin, setLastWin] = useState<number | null>(null);
+    const [lastWinMultiplier, setLastWinMultiplier] = useState<number | null>(null);
+    const [lastProfit, setLastProfit] = useState<number | null>(null);
     const [timeRemaining, setTimeRemaining] = useState(5);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -28,6 +42,7 @@ export default function Game() {
     const phaseTimeoutRef = useRef<NodeJS.Timeout>();
     const countdownIntervalRef = useRef<NodeJS.Timeout>();
     const isGameRunningRef = useRef(false);
+    const scrollRef = useRef<HTMLDivElement | null>(null);
 
     const generateCrashPoint = useCallback(() => {
         const random = Math.random();
@@ -45,27 +60,30 @@ export default function Game() {
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
 
-            const width = canvas.width / window.devicePixelRatio;
-            const height = canvas.height / window.devicePixelRatio;
+            const width = canvas.width / window.devicePixelRatio - 20;
+            const height = canvas.height / window.devicePixelRatio - 14;
+            const lineColor = crashed ? '#ef4444' : '#10b981';
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             ctx.fillStyle = '#0f172a';
+            canvas.style.justifyContent = 'center';
+            canvas.style.alignItems = 'center';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             const gradient = ctx.createLinearGradient(0, height, 0, 0);
-            gradient.addColorStop(0, crashed ? '#ef4444' : '#10b981');
+            gradient.addColorStop(0, lineColor);
             gradient.addColorStop(1, 'transparent');
 
             const maxDisplayMultiplier = 10;
             const baseProgress = Math.min((multiplier - 1) / (maxDisplayMultiplier - 1), 1);
             const totalProgress = (multiplier - 1) / (maxDisplayMultiplier - 1);
-            const maxCurveHeight = height;
+            const maxCurveHeight = height - 20;
             const progressX = baseProgress * width;
 
             ctx.beginPath();
-            ctx.moveTo(0, height);
+            ctx.moveTo(0, height + 2);
 
             for (let x = 0; x <= progressX; x += 2) {
                 const normalizedX = x / width;
@@ -106,7 +124,7 @@ export default function Game() {
                 ctx.lineTo(x, y);
             }
 
-            ctx.strokeStyle = crashed ? '#ef4444' : '#10b981';
+            ctx.strokeStyle = lineColor;
             ctx.lineWidth = 3;
             ctx.stroke();
 
@@ -117,35 +135,32 @@ export default function Game() {
                 ctx.stroke();
             }
 
-            if (!crashed) {
-                // Calcula a posição da ponta da linha
-                const ballX = progressX;
-                const normalizedX = ballX / width;
-                let ballY;
-                if (totalProgress <= 1) {
-                    ballY = height - Math.pow(normalizedX, 1.1) * baseProgress * maxCurveHeight;
-                } else {
-                    const excessProgress = totalProgress - 1;
-                    const dynamicExponent = 1.1 + excessProgress * 1.1;
-                    const curveValue = Math.pow(normalizedX, Math.min(dynamicExponent, 5));
-                    ballY = height - curveValue * maxCurveHeight;
-                }
-
-                ctx.save();
-                ctx.beginPath();
-                ctx.arc(ballX, ballY, 4, 0, 2 * Math.PI); // raio 16px
-                ctx.fillStyle = ctx.createRadialGradient(ballX - 6, ballY - 6, 6, ballX, ballY, 16);
-                ctx.fillStyle.addColorStop?.(0, '#10b981');
-                ctx.fillStyle.addColorStop?.(1, '#10b981');
-                ctx.fillStyle = '#10b981';
-                ctx.shadowColor = '#10b981';
-                ctx.shadowBlur = 12;
-                ctx.fill();
-                ctx.lineWidth = 4;
-                ctx.strokeStyle = '#10b981';
-                ctx.stroke();
-                ctx.restore();
+            const ballX = progressX;
+            const normalizedX = ballX / width;
+            let ballY;
+            if (totalProgress <= 1) {
+                ballY = height - Math.pow(normalizedX, 1.1) * baseProgress * maxCurveHeight;
+            } else {
+                const excessProgress = totalProgress - 1;
+                const dynamicExponent = 1.1 + excessProgress * 1.1;
+                const curveValue = Math.pow(normalizedX, Math.min(dynamicExponent, 5));
+                ballY = height - curveValue * maxCurveHeight;
             }
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(ballX, ballY, 4, 0, 2 * Math.PI);
+            ctx.fillStyle = ctx.createRadialGradient(ballX - 6, ballY - 6, 6, ballX, ballY, 16);
+            ctx.fillStyle.addColorStop?.(0, lineColor);
+            ctx.fillStyle.addColorStop?.(1, lineColor);
+            ctx.fillStyle = lineColor;
+            ctx.shadowColor = lineColor;
+            ctx.shadowBlur = 12;
+            ctx.fill();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = lineColor;
+            ctx.stroke();
+            ctx.restore();
         },
         [gamePhase]
     );
@@ -171,10 +186,12 @@ export default function Game() {
             return;
         }
 
+        let autoCashoutAlreadySet = false;
         isGameRunningRef.current = true;
-        const newCrashPoint = 50;
+        const newCrashPoint = generateCrashPoint();
         setCrashPoint(newCrashPoint);
         setCurrentMultiplier(1.0);
+
         console.log(`Novo ponto de crash: ${newCrashPoint.toFixed(2)}x`);
 
         const startTime = Date.now();
@@ -190,6 +207,13 @@ export default function Game() {
             setCurrentMultiplier(newMultiplier);
             drawGraph(newMultiplier);
 
+            if (!autoCashoutAlreadySet && newMultiplier.toFixed(2) >= autoCashoutRef.current.toFixed(2)) {
+                if (autoCashoutEnabledRef.current && hasBetRef.current) {
+                    autoCashOut(autoCashoutRef.current);
+                }
+                autoCashoutAlreadySet = true;
+            }
+
             if (newMultiplier >= newCrashPoint) {
                 if (animationRef.current) {
                     cancelAnimationFrame(animationRef.current);
@@ -199,13 +223,14 @@ export default function Game() {
                 isGameRunningRef.current = false;
                 setCurrentMultiplier(newCrashPoint);
                 setGamePhase('crashed');
+                autoCashoutAlreadySet = false;
 
                 setTimeout(() => {
                     drawGraph(newCrashPoint, true);
                 }, 0);
 
-                if (hasBet) {
-                    setHasBet(false);
+                if (hasBetRef.current) {
+                    updateHasBet(false);
                 }
 
                 setGameHistory((prev) => [
@@ -213,7 +238,7 @@ export default function Game() {
                         multiplier: newCrashPoint,
                         timestamp: new Date(),
                     },
-                    ...prev.slice(0, 9),
+                    ...prev.slice(0, 30),
                 ]);
 
                 phaseTimeoutRef.current = setTimeout(() => {
@@ -225,7 +250,7 @@ export default function Game() {
         };
 
         gameLoop();
-    }, [generateCrashPoint, hasBet, drawGraph]);
+    }, [generateCrashPoint, hasBetRef, autoCashoutEnabledRef, autoCashoutRef, drawGraph, autoCashoutEnabled]);
 
     const startBettingCountdown = useCallback(() => {
         clearAllTimers();
@@ -234,8 +259,9 @@ export default function Game() {
         setGamePhase('betting');
         setTimeRemaining(5);
         setCurrentMultiplier(1.0);
-        setHasBet(false);
-        setLastWin(null);
+        updateHasBet(false);
+        setLastWinMultiplier(null);
+        setLastProfit(null);
         setCrashPoint(0);
         cleanupGame();
 
@@ -275,17 +301,48 @@ export default function Game() {
         if (gamePhase !== 'betting' || betAmount > balance || betAmount <= 0 || timeRemaining === 0) return;
 
         setBalance((prev) => prev - betAmount);
-        setHasBet(true);
-        setLastWin(null);
+        updateHasBet(true);
+        setLastWinMultiplier(null);
+        setLastProfit(null);
+    };
+
+    const updateHasBet = (value: boolean) => {
+        hasBetRef.current = value;
+        setHasBet(value);
+    };
+
+    const updateCashOut = (value: number) => {
+        autoCashoutRef.current = value;
+        setAutoCashout(value);
+    };
+
+    const updateBetAmount = (value: number) => {
+        betAmountRef.current = value;
+        setBetAmount(value);
+    };
+
+    const updateAutoCashoutEnabled = (value: boolean) => {
+        autoCashoutEnabledRef.current = value;
+        setAutoCashoutEnabled(value);
     };
 
     const cashOut = () => {
-        if (gamePhase !== 'flying' || !hasBet) return;
+        if (gamePhase !== 'flying' || !hasBetRef.current) return;
 
         const winAmount = betAmount * currentMultiplier;
         setBalance((prev) => prev + winAmount);
-        setLastWin(winAmount);
-        setHasBet(false);
+        setLastWinMultiplier(currentMultiplier);
+        setLastProfit(winAmount - betAmount);
+        updateHasBet(false);
+    };
+
+    const autoCashOut = (value: number) => {
+        if (!hasBetRef.current) return;
+        const winAmount = betAmountRef.current * value;
+        setBalance((prev) => prev + winAmount);
+        setLastWinMultiplier(value);
+        setLastProfit(winAmount - betAmountRef.current);
+        updateHasBet(false);
     };
 
     useEffect(() => {
@@ -302,7 +359,8 @@ export default function Game() {
 
     useEffect(() => {
         const canvas = canvasRef.current;
-        if (!canvas) return;
+        const el = scrollRef.current;
+        if (!canvas || !el) return;
 
         const resizeCanvas = () => {
             const rect = canvas.getBoundingClientRect();
@@ -314,9 +372,21 @@ export default function Game() {
             }
         };
 
+        const onWheel = (e: WheelEvent) => {
+            if (e.deltaY !== 0) {
+                e.preventDefault();
+                el.scrollLeft += e.deltaY + 20;
+            }
+        };
+
+        el.addEventListener('wheel', onWheel, { passive: false });
+
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
-        return () => window.removeEventListener('resize', resizeCanvas);
+        return () => {
+            window.removeEventListener('resize', resizeCanvas);
+            el.removeEventListener('wheel', onWheel);
+        };
     }, []);
 
     const getStateText = () => {
@@ -332,22 +402,37 @@ export default function Game() {
         }
     };
 
+    const debugMode = () => {
+        startBettingCountdown();
+        for (let i = 0; i < 10; i++) {
+            setGameHistory((prev) => [
+                {
+                    multiplier: generateCrashPoint(),
+                    timestamp: new Date(Date.now() - i * 60000),
+                },
+                ...prev,
+            ]);
+        }
+        setBalance(1000);
+    };
+
     const canBet = gamePhase === 'betting' && timeRemaining > 0;
     const canCashOut = gamePhase === 'flying' && hasBet;
 
     return (
-        <div className='min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4'>
-            <div className='max-w-6xl mx-auto space-y-6'>
+        <div className='min-h-screen w-full bg-gradient-to-br from-slate-800 via-gray-900 to-slate-800 p-4'>
+            <button className='absolute top-4 text-white' onClick={debugMode}>
+                debug mode
+            </button>
+            <div className='max-w-7xl mx-auto space-y-6'>
                 <div className='text-center space-y-2'>
-                    <h1 className='text-4xl font-bold text-white flex items-center justify-center gap-2'>
+                    <h1 className='text-4xl font-bold text-white flex items-center justify-center p-5 gap-2'>
                         <Plane className='text-blue-400' />
                         Crash Game
                     </h1>
-                    <p className='text-gray-300'>Aposte e retire antes do crash!</p>
                 </div>
-
-                <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
-                    <div className='lg:col-span-2'>
+                <div className='w-full min-h-full grid grid-cols-6 lg:grid-cols-6 gap-6'>
+                    <div className='col-span-6 lg:col-span-4'>
                         <Card className='bg-slate-800/50 border-slate-700'>
                             <CardHeader className='pb-2'>
                                 <div className='flex items-center justify-between'>
@@ -361,9 +446,10 @@ export default function Game() {
                                     </div>
                                 </div>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className='p-2'>
                                 <div className='relative overflow-visible'>
-                                    <canvas ref={canvasRef} className='w-full h-64 bg-slate-900/50 rounded-lg' style={{ overflow: 'visible', width: '100%', height: '300px' }} />
+                                    {lastWinMultiplier && <Badge className='text-white top-1 right-1 font-bold bg-green-400/60 absolute animate-pulse'>Cashout x{lastWinMultiplier.toFixed(2)}</Badge>}
+                                    <canvas ref={canvasRef} className='w-full h-64 pl-4 bg-transparent rounded-lg' style={{ overflow: 'visible', width: '100%', height: '300px' }} />
                                     {gamePhase === 'crashed' && (
                                         <div className='absolute inset-0 flex items-center justify-center'>
                                             <div className='text-6xl animate-bounce'>💥</div>
@@ -388,31 +474,34 @@ export default function Game() {
                         </Card>
                     </div>
 
-                    <div className='space-y-4'>
-                        <Card className='bg-slate-800/50 border-slate-700'>
-                            <CardContent className='pt-6'>
-                                <div className='text-center space-y-2'>
-                                    <div className='flex items-center justify-center gap-2 text-yellow-400'>
-                                        <DollarSign className='w-5 h-5' />
-                                        <span className='text-sm font-medium'>Saldo</span>
-                                    </div>
-                                    <div className='text-2xl font-bold text-white'>R$ {balance.toFixed(2)}</div>
-                                    {lastWin && <div className='text-green-400 text-sm'>+R$ {lastWin.toFixed(2)} (Cash Out)</div>}
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className='bg-slate-800/50 border-slate-700'>
+                    <div className='col-span-6 lg:col-span-2 gap-4 flex flex-col'>
+                        <Card className='bg-slate-800/50 border-slate-700 h-full'>
                             <CardHeader>
                                 <CardTitle className='text-white text-lg'>Apostar</CardTitle>
                             </CardHeader>
-                            <CardContent className='space-y-4'>
+                            <CardContent className='min-h-full gap-2 flex flex-col'>
+                                <div>
+                                    <label className='text-sm text-gray-300 mb-2 block'>Auto Cashout</label>
+                                    <div className='flex items-center w-full gap-2'>
+                                        <Input
+                                            type='number'
+                                            value={autoCashout.toFixed(2)}
+                                            onChange={(e) => updateCashOut(Number(e.target.value))}
+                                            className='bg-slate-700 border-slate-600 text-white'
+                                            disabled={!canBet}
+                                            step='0.01'
+                                            placeholder='1.00'
+                                            min='1.00'
+                                        />
+                                        <Switch disabled={!canBet} checked={autoCashoutEnabled} onCheckedChange={(checked) => updateAutoCashoutEnabled(checked)} />
+                                    </div>
+                                </div>
                                 <div>
                                     <label className='text-sm text-gray-300 mb-2 block'>Valor da Aposta</label>
                                     <Input
                                         type='number'
                                         value={betAmount.toFixed()}
-                                        onChange={(e) => setBetAmount(Number(e.target.value))}
+                                        onChange={(e) => updateBetAmount(Number(e.target.value))}
                                         className='bg-slate-700 border-slate-600 text-white'
                                         disabled={!canBet}
                                         min='1'
@@ -424,7 +513,7 @@ export default function Game() {
                                     <Button
                                         variant='outline'
                                         size='sm'
-                                        onClick={() => setBetAmount((prev) => Math.max(1, prev / 2))}
+                                        onClick={() => updateBetAmount(Math.max(1, betAmountRef.current / 2))}
                                         disabled={!canBet}
                                         className='border-slate-600 text-white hover:bg-slate-700'
                                     >
@@ -433,7 +522,7 @@ export default function Game() {
                                     <Button
                                         variant='outline'
                                         size='sm'
-                                        onClick={() => setBetAmount((prev) => Math.min(balance, prev * 2))}
+                                        onClick={() => updateBetAmount(Math.min(balance, betAmountRef.current * 2))}
                                         disabled={!canBet}
                                         className='border-slate-600 text-white hover:bg-slate-700'
                                     >
@@ -450,21 +539,30 @@ export default function Game() {
                                         {canCashOut ? `Cash Out R$ ${(betAmount * currentMultiplier).toFixed(2)}` : gamePhase === 'betting' ? 'Aguarde o voo...' : 'Perdeu!'}
                                     </Button>
                                 )}
-
-                                {hasBet && (
-                                    <div className='text-center text-sm text-gray-300'>
-                                        Aposta: R$ {betAmount.toFixed(2)}
-                                        <br />
-                                        {gamePhase === 'flying'
-                                            ? `Ganho Atual: R$ ${(betAmount * currentMultiplier).toFixed(2)}`
-                                            : gamePhase === 'betting'
-                                              ? 'Aguardando início do voo...'
-                                              : 'Jogo finalizado'}
-                                    </div>
-                                )}
                             </CardContent>
                         </Card>
-
+                    </div>
+                    <div className='lg:col-span-2 col-span-6 h-full'>
+                        <Card className='bg-slate-800/50 border-slate-700'>
+                            <CardContent className='p-2 h-40 gap-1 flex items-center justify-center'>
+                                <div className='text-center flex items-center flex-col'>
+                                    <div className='text-white font-bold'>Saldo</div>
+                                    <div className='flex gap-2 items-center'>
+                                        <div className='text-2xl font-bold text-white'>R$ {balance.toFixed(2)}</div>
+                                        <Button onClick={() => setBalance(balance + 1000)} className='border-green-400 border hover:bg-green-400/20 h-[25px] w-[25px] p-1'>
+                                            <PlusIcon className='stroke-green-400 h-[20px] w-[20px]' />
+                                        </Button>
+                                    </div>
+                                    {lastProfit && (
+                                        <Badge className='pt-1' variant='default'>
+                                            Lucro: +R$ {lastProfit.toFixed(2)}
+                                        </Badge>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                    <div className='col-span-6 lg:col-span-4'>
                         <Card className='bg-slate-800/50 border-slate-700'>
                             <CardHeader>
                                 <CardTitle className='text-white text-lg flex items-center gap-2'>
@@ -473,11 +571,21 @@ export default function Game() {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <div className='space-y-2 max-h-40 overflow-y-auto'>
+                                <div ref={scrollRef} className='h-[60px] flex gap-3 overflow-x-auto scroll-smooth'>
                                     {gameHistory.map((result, index) => (
-                                        <div key={index} className='flex justify-between items-center p-2 bg-slate-700/50 rounded'>
-                                            <span className='text-gray-300 text-sm'>{result.timestamp.toLocaleTimeString()}</span>
-                                            <Badge variant={result.multiplier >= 2 ? 'default' : result.multiplier >= 1.5 ? 'secondary' : 'destructive'}>{result.multiplier.toFixed(2)}x</Badge>
+                                        <div key={index} className='flex h-10 justify-between items-center rounded'>
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger>
+                                                        <Badge className='p-3' variant={result.multiplier >= 2 ? 'default' : result.multiplier >= 1.5 ? 'secondary' : 'destructive'}>
+                                                            {result.multiplier.toFixed(2)}x
+                                                        </Badge>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side='bottom' className='bg-gray-200'>
+                                                        <p>{result.timestamp.toLocaleTimeString()}</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
                                         </div>
                                     ))}
                                     {gameHistory.length === 0 && <div className='text-center text-gray-400 text-sm py-4'>Nenhum jogo ainda</div>}
