@@ -200,7 +200,7 @@ export default function Game() {
             setCurrentMultiplier(newMultiplier);
             drawGraph(newMultiplier);
 
-            if (!autoCashoutAlreadySet && newMultiplier.toFixed(2) >= autoCashoutRef.current.toFixed(2)) {
+            if (!autoCashoutAlreadySet && newMultiplier >= autoCashoutRef.current) {
                 if (autoCashoutEnabledRef.current && hasBetRef.current) {
                     autoCashOut(autoCashoutRef.current);
                 }
